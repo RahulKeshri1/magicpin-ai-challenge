@@ -54,5 +54,5 @@ MAX_RETRIES: int = 4           # Retry attempts on 429 before giving up
 # Token budgets
 # ---------------------------------------------------------------------------
 
-MAX_TOKENS_COMPOSER: int = 500   # Enough for a WhatsApp message + rationale
+MAX_TOKENS_COMPOSER: int = 2048  # Gemini 2.5 Flash uses thinking tokens from this budget
 MAX_TOKENS_CLASSIFIER: int = 150  # Short classification output

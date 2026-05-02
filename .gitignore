@@ -1,5 +1,4 @@
 .env
-apikey
 __pycache__/
 *.pyc
 .venv/
@@ -7,3 +6,4 @@ venv/
 *.egg-info/
 dist/
 build/
+dataset/expanded

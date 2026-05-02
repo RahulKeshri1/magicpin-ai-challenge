@@ -76,24 +76,31 @@ class RateLimiter:
         self._lock = asyncio.Lock()
 
     async def acquire(self) -> None:
-        async with self._lock:
-            now = time.monotonic()
+        while True:
+            wait: float = 0.0
+            async with self._lock:
+                now = time.monotonic()
+                if len(self._window) >= self._rpm:
+                    oldest = self._window[0]
+                    elapsed = now - oldest
+                    if elapsed < 60.0:
+                        wait = 60.0 - elapsed
+                        logger.info(
+                            "[RateLimiter] Window full (%d/%d). "
+                            "Sleeping %.1fs to stay under RPM limit.",
+                            len(self._window),
+                            self._rpm,
+                            wait,
+                        )
+                    else:
+                        wait = 0.0
 
-            if len(self._window) >= self._rpm:
-                oldest = self._window[0]
-                elapsed = now - oldest
-                if elapsed < 60.0:
-                    wait = 60.0 - elapsed
-                    logger.info(
-                        "[RateLimiter] Window full (%d/%d). "
-                        "Sleeping %.1fs to stay under RPM limit.",
-                        len(self._window),
-                        self._rpm,
-                        wait,
-                    )
-                    await asyncio.sleep(wait)
-
-            self._window.append(time.monotonic())
+                if wait == 0.0:
+                    # Slot is available — record the timestamp and return
+                    self._window.append(time.monotonic())
+                    return
+            # Sleep OUTSIDE the lock so other coroutines can make progress
+            await asyncio.sleep(wait)
 
 
 # ============================================================================
