@@ -66,8 +66,3 @@ pip install -r requirements.txt
 uvicorn bot:app --host 0.0.0.0 --port 8080
 curl http://localhost:8080/v1/healthz
 ```
-
-To regenerate `submission.jsonl` after the Gemini free-tier resets:
-```bash
-python generate_submission.py   # skips already-good entries, fills gaps
-```
