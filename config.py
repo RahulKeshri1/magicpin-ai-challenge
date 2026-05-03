@@ -51,6 +51,13 @@ LLM_TIMEOUT_SECONDS: int = 25  # Hard ceiling — judge timeout is 30s
 MAX_RETRIES: int = 4           # Retry attempts on 429 before giving up
 
 # ---------------------------------------------------------------------------
+# Temperature (challenge spec requires deterministic output — keep at 0)
+# ---------------------------------------------------------------------------
+
+COMPOSER_TEMPERATURE: float = 0.0
+CLASSIFIER_TEMPERATURE: float = 0.0
+
+# ---------------------------------------------------------------------------
 # Token budgets
 # ---------------------------------------------------------------------------
 

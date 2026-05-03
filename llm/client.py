@@ -31,8 +31,10 @@ from groq import AsyncGroq
 from config import (
     CLASSIFIER_MODEL,
     CLASSIFIER_RPM_LIMIT,
+    CLASSIFIER_TEMPERATURE,
     COMPOSER_MODEL,
     COMPOSER_RPM_LIMIT,
+    COMPOSER_TEMPERATURE,
     GEMINI_API_KEY,
     GROQ_API_KEY,
     LLM_TIMEOUT_SECONDS,
@@ -170,7 +172,7 @@ class GeminiClient:
         """Run the blocking SDK call in a thread so we don't block the loop."""
         config = genai_types.GenerateContentConfig(
             max_output_tokens=MAX_TOKENS_COMPOSER,
-            temperature=0.7,
+            temperature=COMPOSER_TEMPERATURE,
             system_instruction=system if system else None,
         )
 
@@ -258,7 +260,7 @@ class GroqClient:
             model=self._model,
             messages=messages,
             max_tokens=MAX_TOKENS_CLASSIFIER,
-            temperature=0.1,
+            temperature=CLASSIFIER_TEMPERATURE,
         )
         return response.choices[0].message.content
 

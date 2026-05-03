@@ -17,6 +17,17 @@ from typing import Optional
 
 logger = logging.getLogger("conversation")
 
+
+def detect_language(text: str) -> str:
+    """Detect primary script: 'hi' for Devanagari-heavy text, 'en' otherwise."""
+    if not text:
+        return "en"
+    devanagari = sum(1 for c in text if "ऀ" <= c <= "ॿ")
+    if devanagari > max(1, len(text) * 0.08):
+        return "hi"
+    return "en"
+
+
 # Known auto-reply phrases (lowercased substrings)
 AUTO_REPLY_PATTERNS: list[str] = [
     "thank you for contacting",
@@ -101,24 +112,34 @@ class ConversationState:
     turns: list[Turn] = field(default_factory=list)
     ended: bool = False
     auto_reply_count: int = 0
+    sent_bodies: set = field(default_factory=set)
+    detected_language: str | None = None
 
     @property
     def turn_count(self) -> int:
         return len(self.turns)
 
     def add_bot_turn(self, body: str, turn_number: int = 0) -> None:
-        """Record a message sent by the bot."""
+        """Record a message sent by the bot and track it for dedup."""
         tn = turn_number or self.turn_count + 1
         self.turns.append(Turn(role="vera", body=body, turn_number=tn))
+        self.sent_bodies.add(body.strip())
 
     def add_merchant_turn(
         self, body: str, turn_number: int = 0, timestamp: str = ""
     ) -> None:
-        """Record a merchant/customer reply."""
+        """Record a merchant/customer reply and auto-detect language."""
         tn = turn_number or self.turn_count + 1
         self.turns.append(
             Turn(role="merchant", body=body, turn_number=tn, timestamp=timestamp)
         )
+        lang = detect_language(body)
+        if lang == "hi":
+            self.detected_language = "hi"
+
+    def is_verbatim_repeat(self, body: str) -> bool:
+        """Return True if this exact body was already sent in this conversation."""
+        return body.strip() in self.sent_bodies
 
     def get_history_text(self, max_turns: int = 10) -> str:
         """Format recent turns as text for prompt injection."""

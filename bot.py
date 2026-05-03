@@ -206,6 +206,15 @@ async def tick(body: TickRequest) -> dict:
             customer_id=customer_id,
             trigger_id=trigger_id,
         )
+
+        # Guard: never send the same body twice in the same conversation
+        if conv.is_verbatim_repeat(composed.body):
+            logger.warning(
+                "Verbatim repeat detected for %s [%s] — skipping tick action",
+                merchant_id, trigger_id,
+            )
+            return None
+
         conv.add_bot_turn(composed.body)
         context_store.mark_sent(suppression_key)
 
@@ -338,6 +347,7 @@ async def reply(body: ReplyRequest) -> dict:
         conversation_history=conv.get_history_text(),
         merchant_message=body.message,
         intent=intent,
+        detected_language=conv.detected_language,
     )
 
     if not reply_data:
@@ -363,8 +373,12 @@ async def reply(body: ReplyRequest) -> dict:
             "rationale": "Merchant confirmed intent — switching to action mode.",
         }
 
-    # Record our reply if we're sending
+    # Guard: never send the same body twice in this conversation
     if reply_data.get("action") == "send" and reply_data.get("body"):
+        if conv.is_verbatim_repeat(reply_data["body"]):
+            logger.warning("[%s] Verbatim repeat in reply — ending", body.conversation_id)
+            conv.ended = True
+            return {"action": "end", "rationale": "Avoiding verbatim repeat — ending conversation."}
         conv.add_bot_turn(reply_data["body"])
 
     if reply_data.get("action") == "end":

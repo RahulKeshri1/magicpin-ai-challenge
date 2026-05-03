@@ -47,7 +47,8 @@ Scope: {ps.get('scope', '')}
 Avg rating: {ps.get('avg_rating', '?')}, Avg reviews: {ps.get('avg_review_count', '?')}
 Avg views (30d): {ps.get('avg_views_30d', '?')}, Avg CTR: {ps.get('avg_ctr', '?')}
 Avg post frequency: every {ps.get('avg_post_freq_days', '?')} days
-Retention (6mo): {ps.get('retention_6mo_pct', '?')}"""
+Retention (6mo): {ps.get('retention_6mo_pct', '?')}
+NOTE for social proof: phrase peer comparisons as "X {category.get('slug','')} in [their city] did Y this month" when you have supporting data above."""
 
 
 def _conversation_history(merchant: dict) -> str:
@@ -132,11 +133,12 @@ Suppression key: {trigger.get('suppression_key', '')}
 4. Offer externalized effort in the FINAL sentence ONLY — single CTA
    • "Want me to draft a patient-ed post you can reshare on your GBP?"
 
-5. Compulsion levers (use 2-3):
+5. Compulsion levers (MUST use 2-3 — choose from):
    • Specific number anchor (38% improvement, not "significantly better")
-   • Social proof ("X dentists in your area already adopted this")
+   • Social proof — USE THIS ("X {category.get('slug','')} in their city adopted this" or "peer median is Y, you're at Z")
    • Reciprocity ("I noticed your cohort — thought you'd want this first")
    • Curiosity gap ("this might change your current protocol")
+   • Asking the merchant — USE THIS IF NO BETTER CTA: end with a specific question about their practice ("Which of your patients would benefit most from this?")
 
 Output format: {{
   "body": "<150-350 chars: source hook → numeric evidence → cohort relevance → single CTA>",
@@ -252,9 +254,12 @@ Suppression key: {trigger.get('suppression_key', '')}
 2. Lead with a FRESH DATA POINT that creates curiosity or urgency
    {hook_hint}
 3. Use ONE of: curiosity gap ("want to see X?"), reciprocity ("spotted this for you"), loss framing ("this window closes Friday")
-4. Keep to 2-3 sentences — no padding, no pleasantries
-5. {lang_note}
-6. Single CTA in last sentence only
+4. Add a SOCIAL PROOF or ASKING beat:
+   • Social proof: "Peers like yours in [city] who re-engaged after a gap saw [X]"
+   • Asking: end with a question — "What's your biggest focus this week — new customers or regulars?"
+5. Keep to 2-3 sentences — no padding, no pleasantries
+6. {lang_note}
+7. Single CTA in last sentence only
 
 Output format: {{
   "body": "<120-280 chars: fresh hook → compulsion lever → single CTA>",
@@ -394,9 +399,20 @@ Suppression key: {trigger.get('suppression_key', '')}
 ═══ INSTRUCTIONS ═══
 This is a curiosity-driven "ask the merchant" message. The goal is to learn \
 something from them AND offer to turn their answer into content.
-• Ask ONE specific question about their business this week.
-• Offer to convert the answer into a Google post / WhatsApp template / social content.
-• Keep it short — 2-3 sentences.
+
+CRITICAL: This trigger is specifically about ASKING THE MERCHANT — do NOT send information,
+ask a question. This is one of the most effective levers (production Vera rarely uses it).
+
+• Ask ONE specific question tied to their category/season/trend signals above.
+  Good examples by category:
+  - dentists: "What's your most-asked treatment this month — whitening or aligners?"
+  - salons: "Which service has your regulars booking most right now?"
+  - restaurants: "What dish has been flying off the menu this week?"
+  - gyms: "What's the #1 goal your new members mention?"
+  - pharmacies: "Which wellness product are customers asking about most this season?"
+• Offer to convert their answer into a Google post / WhatsApp campaign / social content.
+• Keep it short — 2-3 sentences. Zero preamble.
+• Use social proof if helpful: "A few [category] in [city] told me [X] — curious if you're seeing the same."
 • send_as = "vera"
 • CTA: open_ended"""
 
@@ -438,8 +454,13 @@ Suppression key: {trigger.get('suppression_key', '')}
    • Never fabricate percentages or counts
    • Extract directly from above merchant performance
 
-4. **Final sentence: ONE concrete offer**
+4. **Social proof beat (use when possible)**
+   • "Merchants like yours in [city] saw X when they did Y"
+   • "Peer median in this category is Z — you're [above/below]"
+
+5. **Final sentence: ONE concrete offer or question**
    • "Want me to draft X?" or "Reply YES"
+   • Or ask a specific question: "What's your busiest service right now?"
    • NOT multiple CTAs
 
 Output format: {{
@@ -497,9 +518,14 @@ CRITICAL RULES:
    • Your CTR: {perf.get('ctr', '?')} vs peer median: {category.get('peer_stats', {}).get('avg_ctr', '?')}
    • Position: "You're {'above' if perf.get('ctr', 0) > category.get('peer_stats', {}).get('avg_ctr', 0) else 'below'} peer median"
 
-4. **Offer action**
+4. **Compare to peers — always include a social proof beat**
+   • "X {category.get('slug','')} in [city] saw the same spike this month and ran campaign Y"
+   • Or: "Peer median CTR is {category.get('peer_stats', {}).get('avg_ctr', '?')} — you're {'above' if perf.get('ctr', 0) > category.get('peer_stats', {}).get('avg_ctr', 0) else 'below'}"
+
+5. **Offer action**
    • Spike: "Want me to draft a follow-up offer to keep this momentum?"
    • Dip: "Want me to audit your profile against competitors?"
+   • Or ask a question: "What changed this week — new offer, more posts, or something else?"
 
 Output format: {{
   "body": "<150-350 chars>",

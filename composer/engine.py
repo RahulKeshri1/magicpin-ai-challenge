@@ -102,6 +102,7 @@ class EngagementComposer:
         conversation_history: str,
         merchant_message: str,
         intent: str,
+        detected_language: str | None = None,
     ) -> dict | None:
         """Compose a reply to a merchant message in a multi-turn conversation.
 
@@ -116,6 +117,7 @@ class EngagementComposer:
             conversation_history=conversation_history,
             merchant_message=merchant_message,
             intent=intent,
+            detected_language=detected_language,
         )
 
         system_prompt = build_system_prompt(category)
@@ -308,7 +310,21 @@ Output only the label."""
         """Parse the LLM's JSON response into a ComposedMessage."""
         data = self._extract_json(raw)
         if not data:
-            # Fallback: treat the entire response as the body
+            # Attempt regex extraction of the body field from a truncated JSON block
+            body_match = re.search(r'"body"\s*:\s*"((?:[^"\\]|\\.)*)', raw)
+            if body_match:
+                try:
+                    extracted_body = json.loads('"' + body_match.group(1) + '"')
+                except Exception:
+                    extracted_body = body_match.group(1)
+                logger.warning("JSON parse failed; extracted body field via regex")
+                return ComposedMessage(
+                    body=extracted_body.strip(),
+                    cta="open_ended",
+                    send_as="vera" if trigger.get("scope") != "customer" else "merchant_on_behalf",
+                    suppression_key=trigger.get("suppression_key", ""),
+                    rationale="Fallback: regex-extracted body from non-parseable JSON",
+                )
             logger.warning("Could not parse JSON from LLM response, using raw text")
             return ComposedMessage(
                 body=raw.strip()[:500],
@@ -354,13 +370,22 @@ Output only the label."""
     def _extract_json(self, text: str) -> dict | None:
         """Extract a JSON object from LLM output.
 
-        Handles: markdown fences, thinking blocks, extra text before/after.
+        Handles: markdown fences, thinking blocks, smart quotes, extra text.
         """
         if not text:
             return None
 
+        # Normalise smart/curly quotes that LLMs sometimes emit, which break
+        # json.loads even though the structure is otherwise valid.
+        normalised = (
+            text
+            .replace("“", '"').replace("”", '"')   # " "
+            .replace("‘", "'").replace("’", "'")   # ' '
+            .replace("′", "'")                          # ′
+        )
+
         # Strip markdown code fences (```json ... ``` or ``` ... ```)
-        cleaned = re.sub(r"```(?:json)?\s*", "", text)
+        cleaned = re.sub(r"```(?:json)?\s*", "", normalised)
         cleaned = cleaned.strip()
 
         # Try direct parse on cleaned text
@@ -369,11 +394,11 @@ Output only the label."""
         except (json.JSONDecodeError, ValueError):
             pass
 
-        # Find all JSON-like blocks using brace matching
-        # This handles cases where the LLM prepends thinking text
+        # Find all JSON-like blocks using brace matching.
+        # This handles cases where the LLM prepends thinking text.
         depth = 0
         start = -1
-        for i, ch in enumerate(text):
+        for i, ch in enumerate(normalised):
             if ch == "{":
                 if depth == 0:
                     start = i
@@ -381,7 +406,7 @@ Output only the label."""
             elif ch == "}":
                 depth -= 1
                 if depth == 0 and start >= 0:
-                    candidate = text[start : i + 1]
+                    candidate = normalised[start : i + 1]
                     try:
                         return json.loads(candidate)
                     except (json.JSONDecodeError, ValueError):

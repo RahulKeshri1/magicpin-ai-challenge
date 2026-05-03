@@ -12,14 +12,24 @@ def reply_prompt(
     conversation_history: str,
     merchant_message: str,
     intent: str,
+    detected_language: str | None = None,
 ) -> str:
     m_id = merchant.get("identity", {})
     offers = [o["title"] for o in merchant.get("offers", []) if o.get("status") == "active"]
 
+    # Effective language: prefer what the merchant just used, fall back to profile
+    profile_langs = m_id.get("languages", ["en"])
+    effective_lang = detected_language or ("hi" if "hi" in profile_langs else "en")
+    lang_instruction = (
+        "Reply in Hindi-English code-mix (Hinglish) — the merchant is writing in Hindi."
+        if effective_lang == "hi"
+        else "Reply in English (merchant's profile language)."
+    )
+
     return f"""\
 ═══ MERCHANT ═══
 Name: {m_id.get('name', '')} | Owner: {m_id.get('owner_first_name', '')}
-Languages: {', '.join(m_id.get('languages', ['en']))}
+Languages: {', '.join(profile_langs)}
 Active offers: {', '.join(offers) if offers else 'None'}
 Signals: {', '.join(merchant.get('signals', []))}
 
@@ -31,6 +41,9 @@ Signals: {', '.join(merchant.get('signals', []))}
 
 ═══ DETECTED INTENT ═══
 {intent}
+
+═══ LANGUAGE ═══
+{lang_instruction}
 
 ═══ INSTRUCTIONS ═══
 Continue the conversation based on the detected intent.
