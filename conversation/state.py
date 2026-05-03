@@ -164,9 +164,9 @@ class ConversationState:
             self.auto_reply_count += 1
             return True
 
-        # Pattern 2: Same message repeated by merchant
+        # Pattern 2: Same message repeated by merchant (exclude current turn)
         prev_merchant_msgs = [
-            t.body.strip() for t in self.turns if t.role == "merchant"
+            t.body.strip() for t in self.turns[:-1] if t.role == "merchant"
         ]
         if prev_merchant_msgs and message.strip() in prev_merchant_msgs:
             self.auto_reply_count += 1
