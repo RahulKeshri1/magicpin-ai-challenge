@@ -1,90 +1,73 @@
-# Vera — magicpin AI Challenge Submission
+# Vera Bot — magicpin AI Challenge
+
+**Team:** Solo Rahul (RahulKeshri1)
+**Model:** Gemini 2.5 Flash (composition) + Llama 3.3 70B via Groq (classification)
+**Contact:** rahulkumarkeshri475@gmail.com
+
+---
 
 ## Approach
 
-**Dual-LLM architecture** with a 4-context composition framework:
-
-1. **Gemini 2.5 Flash** (Google AI Studio) — message composition via structured prompts
-2. **Groq Llama 3.3 70B** — lightweight intent classification (auto-reply, action, question, hostile)
-
-### Architecture
+The bot uses a **dual-LLM architecture** built on the 4-context framework:
 
 ```
-Judge Harness → FastAPI Bot (5 endpoints)
-                ├── Context Store (versioned, in-memory)
-                ├── Conversation Registry (per-conv state tracking)
-                └── Composer Engine
-                    ├── Router (trigger.kind → prompt variant)
-                    ├── Prompt Templates (merchant-facing / customer-facing)
-                    ├── LLM Client (rate-limited, retries, timeout)
-                    └── JSON Parser (brace-matching, fence-stripping)
+compose(category, merchant, trigger, customer?) → message
 ```
 
-### Key Design Decisions
+**Gemini 2.5 Flash** handles message composition. Its thinking capability is used deliberately — the 2048-token output budget lets it reason about which compulsion levers fit before writing. Each trigger kind routes to a dedicated prompt template (15+ variants) so `research_digest`, `perf_dip`, `competitor_opened`, and `recall_due` each get context-aware instructions rather than a single generic prompt.
 
-| Decision | Rationale |
+**Groq Llama 3.3 70B** handles lightweight intent classification in reply flows. It's fast (< 2s) and cheap, which keeps the `/v1/reply` call well within the 30s judge timeout after Gemini already ran for the proactive message.
+
+**Prompt engineering principles:**
+- First sentence rule: must answer "why am I messaging you RIGHT NOW?" — trigger payload embedded in the opening
+- Fabrication detection: all numbers in the composed body are checked against context; fabricated values trigger a retry with repair instructions
+- Category voice injection: `vocab_allowed`, `vocab_taboo`, tone, and salutation patterns from `CategoryContext` are injected into the system prompt, not post-filtered
+- Social proof + asking the merchant: both underused in production Vera — explicitly instructed in every prompt template as priority levers
+- CTA enforcement: validator checks CTA is the last sentence; generic "X% off" patterns flagged and repaired
+
+---
+
+## Key Tradeoffs
+
+| Decision | Why |
 |---|---|
-| **Token-bucket rate limiter** | Proactively avoids 429s instead of reacting — deque-based sliding window |
-| **Intent detection before auto-reply** | Prevents false positives when merchant repeats a positive-intent message |
-| **Safety-net on intent_action** | If LLM returns "end" on a confirmed action intent, overrides with an action-mode response |
-| **Brace-matching JSON parser** | Gemini 2.5 Flash wraps output in markdown fences and thinking blocks; regex fails on nested JSON |
-| **2048 output tokens** | Gemini's thinking model uses output budget for reasoning; 500 tokens truncates responses |
-| **Category voice injection** | System prompt dynamically includes vocab_allowed, vocab_taboo, and salutation patterns from CategoryContext |
+| Token-bucket rate limiter (proactive) | Free-tier APIs (15 RPM Gemini, 30 RPM Groq) fail in bursts; sliding-window deque avoids cascading 429s |
+| Intent heuristics before LLM classifier | "Yes"/"haan kar do" patterns checked first — prevents the intent-handoff failure that production Vera has (see challenge brief §3) |
+| Safety-net override on intent_action | LLM occasionally returns "end" when merchant says yes; overridden with action-mode response |
+| Smart-quote normalisation + regex body extraction | Gemini sometimes emits curly quotes or wraps JSON in thinking blocks — brace-matching + regex fallback recovers the body without losing the message |
+| Per-turn language detection | Devanagari character ratio detection — if merchant switches to Hindi mid-conversation, reply prompt switches to Hinglish automatically |
+| Conditional retry (critical issues only) | Only re-prompts for `body_too_short` or `fabricated_numbers` — non-critical issues don't retry, keeping latency inside the 30s budget |
 
-### What Additional Context Would Help
+---
 
-1. **More customer relationship data** — knowing purchase history, NPS score, and referral activity would enable more personalized customer-facing messages
-2. **Merchant response patterns** — historical response rates by time-of-day and day-of-week for optimal send timing
-3. **A/B test results** — which compulsion levers (curiosity vs loss-aversion vs social proof) work best per category
-4. **WhatsApp template approval status** — knowing which templates are pre-approved would help craft compliant messages
+## Multi-turn Handling
 
-## Quick Start
+- **Auto-reply detection:** 13 known canned-reply patterns + verbatim repeat detection; 2 consecutive auto-replies → `end`
+- **Intent transitions:** heuristic + LLM; merchant saying "let's do it" routes directly to action mode, never back to qualification
+- **Verbatim dedup:** `sent_bodies` set per conversation; returning the same message twice returns `end` instead of triggering the -2 judge penalty
+- **Graceful exit:** 3 unanswered turns (basic plan) / 5 (Pro plan) → polite `end`
+
+---
+
+## What Additional Context Would Help Most
+
+1. **Per-category compulsion lever rankings** — A/B test data on which of curiosity, social proof, and loss-aversion converts best for dentists vs restaurants vs gyms
+2. **Merchant WhatsApp activity window** — knowing if a merchant typically reads messages at 9am vs 7pm would let the bot pick the right tick to send
+3. **Historical auto-reply fingerprints** — merchant-level cache of known auto-reply strings to skip the LLM classifier entirely for repeat offenders
+
+---
+
+## Running Locally
 
 ```bash
-# 1. Create .env
-cp .env.example .env
-# Edit .env with your GEMINI_API_KEY and GROQ_API_KEY
-
-# 2. Install
+cp .env.example .env          # add GEMINI_API_KEY and GROQ_API_KEY
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-# 3. Generate dataset
-cd dataset && python generate_dataset.py --seed-dir . --out ./expanded && cd ..
-
-# 4. Run
 uvicorn bot:app --host 0.0.0.0 --port 8080
-
-# 5. Test
-python judge_simulator.py
+curl http://localhost:8080/v1/healthz
 ```
 
-## Project Structure
-
+To regenerate `submission.jsonl` after the Gemini free-tier resets:
+```bash
+python generate_submission.py   # skips already-good entries, fills gaps
 ```
-├── bot.py                    # FastAPI — 5 endpoints
-├── config.py                 # API keys, model config, rate limits
-├── models.py                 # Pydantic request/response schemas
-├── llm/
-│   └── client.py             # Dual-LLM client + rate limiter
-├── context/
-│   └── store.py              # Versioned in-memory context store
-├── conversation/
-│   └── state.py              # Multi-turn state + intent detection
-├── composer/
-│   ├── engine.py             # Main composition orchestrator
-│   ├── router.py             # Trigger kind → prompt mapping
-│   └── prompts/
-│       ├── base_system.py    # Shared system prompt
-│       ├── merchant_facing.py # Per-kind merchant prompts
-│       ├── customer_facing.py # Per-kind customer prompts
-│       └── reply_handler.py  # Multi-turn reply prompt
-├── dataset/                  # Provided dataset
-├── requirements.txt
-└── .env.example
-```
-
-## Team
-
-- **Team**: Solo Rahul
-- **Model**: Gemini 2.5 Flash + Llama 3.3 70B (Groq)
